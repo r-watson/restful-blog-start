@@ -5,7 +5,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
 from wtforms.validators import DataRequired, URL
 from flask_ckeditor import CKEditor, CKEditorField
-
+import datetime
 
 ## Delete this code:
 # import requests
@@ -38,21 +38,25 @@ class CreatePostForm(FlaskForm):
     subtitle = StringField("Subtitle", validators=[DataRequired()])
     author = StringField("Your Name", validators=[DataRequired()])
     img_url = StringField("Blog Image URL", validators=[DataRequired(), URL()])
-    body = StringField("Blog Content", validators=[DataRequired()])
+    # body = StringField("Blog Content", validators=[DataRequired()])
+    # Change StringField to CKEditorField
+    body = CKEditorField('Blog Content', validators=[DataRequired()])
     submit = SubmitField("Submit Post")
 
 
 @app.route('/')
 def get_all_posts():
+    posts = BlogPost.query.all()
     return render_template("index.html", all_posts=posts)
 
 
 @app.route("/post/<int:index>")
 def show_post(index):
-    requested_post = None
-    for blog_post in posts:
-        if blog_post["id"] == index:
-            requested_post = blog_post
+    requested_post = BlogPost.query.get(index)
+    # requested_post = None
+    # for blog_post in posts:
+    #     if blog_post.id == index:
+    #         requested_post = blog_post
     return render_template("post.html", post=requested_post)
 
 
@@ -64,6 +68,53 @@ def about():
 @app.route("/contact")
 def contact():
     return render_template("contact.html")
+
+@app.route("/new-post", methods=["GET", "POST"])
+def new_post():
+    form = CreatePostForm()
+    today = datetime.datetime.now().strftime("%B %d, %Y")
+    # ckeditor.init_app(app)
+    if form.validate_on_submit():
+        new_post = BlogPost (
+            title=form.title.data,
+            subtitle=form.subtitle.data,
+            # <full month name> <date number>, <full year>
+            date=today,
+            body=form.body.data,
+            author=form.author.data,
+            img_url=form.img_url.data,
+        )
+        db.session.add(new_post)
+        db.session.commit()
+        return redirect(url_for('get_all_posts'))
+    return render_template("make-post.html", form=form)
+
+@app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+def edit_post(post_id):
+    post = BlogPost.query.get(post_id)
+    edit_form = CreatePostForm(
+        title=post.title,
+        subtitle=post.subtitle,
+        img_url=post.img_url,
+        author=post.author,
+        body=post.body,
+    )
+    if edit_form.validate_on_submit():
+        post.title = edit_form.title.data
+        post.subtitle = edit_form.subtitle.data
+        post.img_url = edit_form.img_url.data
+        post.author = edit_form.author.data
+        post.body = edit_form.body.data
+        db.session.commit()
+        return redirect(url_for('show_post', index=post.id))
+    return render_template('make-post.html', form=edit_form, is_edit=True)
+
+@app.route("/delete/<int:post_id>")
+def delete_post(post_id):
+    post = BlogPost.query.get(post_id)
+    db.session.delete(post)
+    db.session.commit()
+    return redirect(url_for('get_all_posts'))
 
 if __name__ == "__main__":
     app.run(debug=True)
